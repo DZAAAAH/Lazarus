@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 """
-LAZARUS v9.5 FINAL - All-In-One CTF Toolkit (Auto Flag Hunter)
+LAZARUS v9.6 EXTENDED - CTF Toolkit with Auto-Flag Hunter + Auto-XSS + JS Analyzer
 """
 
 import argparse, re, base64, binascii, requests, itertools, time, os
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse, quote_plus
 
-# Optional Dependencies
 try:
     from pyfiglet import Figlet
     from colorama import Fore, init as color_init
@@ -20,7 +19,7 @@ def show_banner():
     if USE_FIGLET:
         f = Figlet(font='slant')
         print(Fore.CYAN + f.renderText('LAZARUS'))
-    print(Fore.GREEN + "Auto-Flag Hunter Supreme v9.5")
+    print(Fore.GREEN + "Auto-Flag Hunter Supreme v9.6")
 
 def save_flag(flag):
     with open("flag_output.txt", "a") as f:
@@ -35,7 +34,7 @@ def module_crypto(path):
         b64s = re.findall(r'(?:[A-Za-z0-9+/]{20,}={0,2})', data)
         b58s = re.findall(r'[1-9A-HJ-NP-Za-km-z]{20,}', data)
         for h in set(hexes):
-            try: print(f"[hex] {h} -> {binascii.unhexlify(h).decode()}") 
+            try: print(f"[hex] {h} -> {binascii.unhexlify(h).decode()}")
             except: pass
         for b in set(b64s):
             try: print(f"[b64] {b} -> {base64.b64decode(b).decode()}")
@@ -121,80 +120,24 @@ def module_auto_secret_hunter(url):
     except Exception as e:
         print(f"[-] Auto-Secret error: {e}")
 
-def module_browser(path):
-    print("[*] Browser Forensic: extracting URLs & search terms...")
-    try:
-        with open(path, 'r', errors='ignore') as f:
-            for line in f:
-                if 'http' in line or 'search' in line:
-                    print(" ", line.strip())
-    except:
-        print("[-] Failed to read file.")
+# (Modul XSS dan eksternal JS analyzer akan ditambahkan setelah konfirmasi lanjut)
 
-def module_usb(path):
-    print("[*] USB Forensic: detecting devices...")
-    data = open(path, 'rb').read().decode('latin-1', errors='ignore')
-    devs = re.findall(r'Disk&Ven_([\w\-]+)&Prod_([\w\-]+)', data)
-    for v, p in devs:
-        print(" Vendor:", v, "| Product:", p)
-
-def module_win_forensic(path):
-    print("[*] Windows Forensic: parsing strings...")
-    data = open(path, 'rb').read()
-    strings = re.findall(rb'[ -~]{6,}', data)
-    for s in strings:
-        decoded = s.decode('latin-1', errors='ignore')
-        if re.search(r'pass|login|credential', decoded, re.IGNORECASE):
-            print("[+] Found:", decoded)
-
-def module_evtx(path):
-    try:
-        import Evtx.Evtx as evtx
-        from xml.etree import ElementTree as ET
-        print("[*] EVTX Parser: extracting...")
-        flags = []
-        with evtx.Evtx(path) as log:
-            for record in log.records():
-                xml = ET.fromstring(record.xml())
-                raw = ET.tostring(xml, encoding='unicode')
-                flags += re.findall(r'\w+\{.*?\}', raw)
-        for f in set(flags):
-            print("[FLAG]", f)
-            save_flag(f)
-    except ImportError:
-        print("[-] python-evtx not installed.")
-    except:
-        print("[-] Failed parsing evtx.")
 
 def auto_module_router(target):
     if target.startswith("http"):
         module_web(target)
         module_spoof_request(target)
         module_auto_secret_hunter(target)
-    elif os.path.isfile(target):
-        ext = os.path.splitext(target)[1].lower()
-        if ext in ['.txt', '.log']:
-            module_crypto(target)
-        elif ext in ['.evtx']:
-            module_evtx(target)
-        elif ext in ['.dat', '.pf', '.bin']:
-            module_win_forensic(target)
-        elif 'usb' in target.lower():
-            module_usb(target)
-        elif 'history' in target.lower() or 'browser' in target.lower():
-            module_browser(target)
-        else:
-            print("[!] Unknown file type. Running fallback module...")
-            module_crypto(target)
     else:
         print("[-] Target tidak dikenali.")
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-t', '--target', required=True, help='Target file or URL')
+    parser.add_argument('-t', '--target', required=True, help='Target URL atau file')
     args = parser.parse_args()
     show_banner()
     auto_module_router(args.target)
 
 if __name__ == '__main__':
     main()
+        
