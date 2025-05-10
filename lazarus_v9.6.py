@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-LAZARUS v9.6 EXTENDED - CTF Toolkit with Auto-Flag Hunter + Auto-XSS + JS Analyzer
+LAZARUS v9.6 PRO EXTENDED - All-In-One Auto Flag Hunter + Forensics + Recon Toolkit
 """
 
 import argparse, re, base64, binascii, requests, itertools, time, os
@@ -19,7 +19,7 @@ def show_banner():
     if USE_FIGLET:
         f = Figlet(font='slant')
         print(Fore.CYAN + f.renderText('LAZARUS'))
-    print(Fore.GREEN + "Auto-Flag Hunter Supreme v9.6")
+    print(Fore.GREEN + "Auto-Flag Hunter Supreme v9.6 PRO EXTENDED")
 
 def save_flag(flag):
     with open("flag_output.txt", "a") as f:
@@ -34,7 +34,7 @@ def module_crypto(path):
         b64s = re.findall(r'(?:[A-Za-z0-9+/]{20,}={0,2})', data)
         b58s = re.findall(r'[1-9A-HJ-NP-Za-km-z]{20,}', data)
         for h in set(hexes):
-            try: print(f"[hex] {h} -> {binascii.unhexlify(h).decode()}")
+            try: print(f"[hex] {h} -> {binascii.unhexlify(h).decode()}") 
             except: pass
         for b in set(b64s):
             try: print(f"[b64] {b} -> {base64.b64decode(b).decode()}")
@@ -49,7 +49,17 @@ def module_crypto(path):
                 print(f"[b58] {b} -> {raw.decode('latin-1', errors='ignore')}")
             except: pass
     except Exception as e:
-        print("[-] Error:", e)
+        print("[-] Crypto error:", e)
+
+def module_log(path):
+    print("[*] Log Analysis: scanning for alerts, errors, malware...")
+    try:
+        with open(path, 'r', errors='ignore') as f:
+            for i, line in enumerate(f):
+                if re.search(r'error|fail|unauth|malware|exploit', line, re.IGNORECASE):
+                    print(f"[!] Log line [{i}]:", line.strip())
+    except:
+        print("[-] Log analysis failed.")
 
 def module_web(url):
     print("[*] Web auto-exploit:", url)
@@ -86,23 +96,31 @@ def module_spoof_request(url):
     print("[-] Tidak ditemukan flag dari kombinasi header umum.")
 
 def module_auto_secret_hunter(url):
-    print("[*] Auto-Secret Hunter: scanning keyword from URL & Google...")
+    print("[*] Auto-Secret Hunter: scanning keyword from URL & search engine...")
     try:
         parts = urlparse(url).path.strip('/').split('/')
         base_keywords = list(set(parts + [w for p in parts for w in re.split(r'[-_]', p)]))
         print(f"[+] Keywords from URL: {base_keywords[:6]}")
         search_terms = '+'.join(base_keywords[:3])
-        search_url = f"https://html.duckduckgo.com/html/?q={search_terms}+ctf+secret"
+        search_engines = [
+            f"https://html.duckduckgo.com/html/?q={search_terms}+ctf+secret",
+            f"https://www.bing.com/search?q={search_terms}+ctf+secret"
+        ]
         headers = {"User-Agent": "Mozilla/5.0"}
-        r = requests.get(search_url, headers=headers, timeout=8)
-        hits = re.findall(r'<a.*?href=".*?">(.*?)</a>', r.text, re.DOTALL)
         candidates = set()
-        for h in hits:
-            clean = BeautifulSoup(h, 'html.parser').text
-            found = re.findall(r'\b[a-zA-Z0-9]{5,25}\b', clean)
-            for f in found:
-                if f.lower() not in ['submit', 'ctf', 'index', 'home']:
-                    candidates.add(f.lower())
+        for engine in search_engines:
+            try:
+                r = requests.get(engine, headers=headers, timeout=8)
+                hits = re.findall(r'<a.*?>(.*?)</a>', r.text, re.DOTALL)
+                for h in hits:
+                    clean = BeautifulSoup(h, 'html.parser').text
+                    found = re.findall(r'\b[a-zA-Z0-9]{5,25}\b', clean)
+                    for f in found:
+                        if f.lower() not in ['submit', 'ctf', 'index', 'home']:
+                            candidates.add(f.lower())
+                if candidates: break
+            except Exception as e:
+                print(f"[-] {engine.split('/')[2]} gagal: {e}")
         test_list = list(set(base_keywords + list(candidates)))[:25]
         print(f"[*] Mencoba {len(test_list)} kandidat sebagai ?secret=")
         for word in test_list:
@@ -116,28 +134,129 @@ def module_auto_secret_hunter(url):
                     return
             except:
                 continue
-        print("[-] Tidak ditemukan flag dari kandidat Google.")
+        print("[-] Tidak ditemukan flag dari kandidat hasil pencarian.")
     except Exception as e:
-        print(f"[-] Auto-Secret error: {e}")
+        print(f"[-] Auto-Secret module error: {e}")
 
-# (Modul XSS dan eksternal JS analyzer akan ditambahkan setelah konfirmasi lanjut)
+def module_xss_auto(url):
+    print("[*] Auto-XSS Testing...")
+    payload = "<script>alert(1)</script>"
+    try:
+        r = requests.get(url + "?q=" + quote_plus(payload), timeout=5)
+        if payload in r.text:
+            print(Fore.GREEN + "[+] Reflected XSS Detected!")
+        else:
+            print("[-] No basic reflected XSS.")
+    except:
+        print("[-] XSS test failed.")
 
+def module_js_analyzer(url):
+    print("[*] Crawling external JavaScript...")
+    try:
+        r = requests.get(url, timeout=6)
+        soup = BeautifulSoup(r.text, 'html.parser')
+        scripts = soup.find_all('script', src=True)
+        for s in scripts:
+            src = urljoin(url, s['src'])
+            try:
+                js = requests.get(src, timeout=6).text
+                print("[+] JS URL:", src)
+                if 'flag' in js or 'ctf' in js:
+                    print("[!] Possible flag hint in JS:")
+                    print(js[:200])
+            except:
+                continue
+    except:
+        print("[-] JS analyzer error.")
+
+def module_dir_brute(url):
+    print("[*] Dir Brute Force (basic)...")
+    wordlist = ["admin", "backup", "flag", "secret", ".git", "config"]
+    for w in wordlist:
+        test = url.rstrip('/') + '/' + w
+        try:
+            r = requests.get(test, timeout=4)
+            if r.status_code in [200, 301, 302]:
+                print("[+] Found:", test)
+        except:
+            continue
+
+def module_browser(path):
+    print("[*] Browser Forensic: extracting URLs & search terms...")
+    try:
+        with open(path, 'r', errors='ignore') as f:
+            for line in f:
+                if 'http' in line or 'search' in line:
+                    print(" ", line.strip())
+    except:
+        print("[-] Failed to read file.")
+
+def module_usb(path):
+    print("[*] USB Forensic: detecting devices...")
+    try:
+        data = open(path, 'rb').read().decode('latin-1', errors='ignore')
+        devs = re.findall(r'Disk&Ven_([\w\-]+)&Prod_([\w\-]+)', data)
+        for v, p in devs:
+            print(" Vendor:", v, "| Product:", p)
+    except:
+        print("[-] Failed reading USB evidence.")
+
+def module_win_forensic(path):
+    print("[*] Windows Forensic: parsing strings...")
+    try:
+        data = open(path, 'rb').read()
+        strings = re.findall(rb'[ -~]{6,}', data)
+        for s in strings:
+            decoded = s.decode('latin-1', errors='ignore')
+            if re.search(r'pass|login|cred|user|flag', decoded, re.IGNORECASE):
+                print("[+] Found:", decoded)
+    except:
+        print("[-] Windows forensic failed.")
+
+def module_evtx(path):
+    try:
+        import Evtx.Evtx as evtx
+        from xml.etree import ElementTree as ET
+        print("[*] EVTX Parser: extracting...")
+        flags = []
+        with evtx.Evtx(path) as log:
+            for record in log.records():
+                xml = ET.fromstring(record.xml())
+                raw = ET.tostring(xml, encoding='unicode')
+                flags += re.findall(r'\w+\{.*?\}', raw)
+        for f in set(flags):
+            print("[FLAG]", f)
+            save_flag(f)
+    except:
+        print("[-] Failed parsing evtx.")
 
 def auto_module_router(target):
     if target.startswith("http"):
         module_web(target)
         module_spoof_request(target)
         module_auto_secret_hunter(target)
+        module_xss_auto(target)
+        module_js_analyzer(target)
+        module_dir_brute(target)
+    elif os.path.isfile(target):
+        name = os.path.basename(target).lower()
+        ext = os.path.splitext(target)[1].lower()
+        if ext in ['.log']: module_log(target)
+        elif ext in ['.txt']: module_crypto(target)
+        elif ext in ['.evtx']: module_evtx(target)
+        elif any(x in name for x in ['ntuser', 'sam', 'system', 'security']): module_win_forensic(target)
+        elif 'usb' in name: module_usb(target)
+        elif 'history' in name or 'browser' in name: module_browser(target)
+        else: module_crypto(target)
     else:
         print("[-] Target tidak dikenali.")
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-t', '--target', required=True, help='Target URL atau file')
+    parser.add_argument('-t', '--target', required=True, help='Target file or URL')
     args = parser.parse_args()
     show_banner()
     auto_module_router(args.target)
 
 if __name__ == '__main__':
     main()
-        
