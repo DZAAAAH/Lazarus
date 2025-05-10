@@ -5,7 +5,7 @@ LAZARUS v9.5 FINAL - All-In-One CTF Toolkit (Auto Flag Hunter)
 
 import argparse, re, base64, binascii, requests, itertools, time, os
 from bs4 import BeautifulSoup
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse, quote_plus
 
 # Optional Dependencies
 try:
@@ -35,7 +35,7 @@ def module_crypto(path):
         b64s = re.findall(r'(?:[A-Za-z0-9+/]{20,}={0,2})', data)
         b58s = re.findall(r'[1-9A-HJ-NP-Za-km-z]{20,}', data)
         for h in set(hexes):
-            try: print(f"[hex] {h} -> {binascii.unhexlify(h).decode()}")
+            try: print(f"[hex] {h} -> {binascii.unhexlify(h).decode()}") 
             except: pass
         for b in set(b64s):
             try: print(f"[b64] {b} -> {base64.b64decode(b).decode()}")
@@ -86,6 +86,41 @@ def module_spoof_request(url):
             continue
     print("[-] Tidak ditemukan flag dari kombinasi header umum.")
 
+def module_auto_secret_hunter(url):
+    print("[*] Auto-Secret Hunter: scanning keyword from URL & Google...")
+    try:
+        parts = urlparse(url).path.strip('/').split('/')
+        base_keywords = list(set(parts + [w for p in parts for w in re.split(r'[-_]', p)]))
+        print(f"[+] Keywords from URL: {base_keywords[:6]}")
+        search_terms = '+'.join(base_keywords[:3])
+        search_url = f"https://html.duckduckgo.com/html/?q={search_terms}+ctf+secret"
+        headers = {"User-Agent": "Mozilla/5.0"}
+        r = requests.get(search_url, headers=headers, timeout=8)
+        hits = re.findall(r'<a.*?href=".*?">(.*?)</a>', r.text, re.DOTALL)
+        candidates = set()
+        for h in hits:
+            clean = BeautifulSoup(h, 'html.parser').text
+            found = re.findall(r'\b[a-zA-Z0-9]{5,25}\b', clean)
+            for f in found:
+                if f.lower() not in ['submit', 'ctf', 'index', 'home']:
+                    candidates.add(f.lower())
+        test_list = list(set(base_keywords + list(candidates)))[:25]
+        print(f"[*] Mencoba {len(test_list)} kandidat sebagai ?secret=")
+        for word in test_list:
+            try:
+                resp = requests.get(f"{url}?secret={quote_plus(word)}", timeout=5)
+                flags = re.findall(r'\w+\{.*?\}', resp.text)
+                if flags:
+                    for f in flags:
+                        print(Fore.CYAN + "[FLAG]", f)
+                        save_flag(f)
+                    return
+            except:
+                continue
+        print("[-] Tidak ditemukan flag dari kandidat Google.")
+    except Exception as e:
+        print(f"[-] Auto-Secret error: {e}")
+
 def module_browser(path):
     print("[*] Browser Forensic: extracting URLs & search terms...")
     try:
@@ -135,6 +170,7 @@ def auto_module_router(target):
     if target.startswith("http"):
         module_web(target)
         module_spoof_request(target)
+        module_auto_secret_hunter(target)
     elif os.path.isfile(target):
         ext = os.path.splitext(target)[1].lower()
         if ext in ['.txt', '.log']:
