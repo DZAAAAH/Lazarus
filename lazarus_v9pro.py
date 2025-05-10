@@ -6,7 +6,6 @@ import argparse, re, base64, binascii, requests, itertools, time, sys, zipfile, 
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, quote_plus
 
-# Optional dependencies for banner
 try:
     from pyfiglet import Figlet
     from colorama import Fore, Style, init as color_init
