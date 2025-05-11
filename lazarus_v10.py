@@ -3,13 +3,14 @@
 LAZARUS v10 PRO+ - Ultimate CTF Toolkit (Auto Flag Hunter + Forensic + Web Exploit)
 """
 
-import argparse, re, base64, binascii, requests, os, time, itertools, subprocess
+import argparse, re, base64, binascii, requests, os, time, itertools, subprocess, zipfile
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse, quote_plus
+from requests_html import HTMLSession
+from colorama import Fore, init as color_init
 
 try:
     from pyfiglet import Figlet
-    from colorama import Fore, init as color_init
     color_init(autoreset=True)
     USE_FIGLET = True
 except ImportError:
@@ -136,7 +137,6 @@ def module_click_sim(url):
             print("[-] Tidak ada interaksi klik terdeteksi.")
     except:
         print("[-] Gagal fetch halaman.")
-
 def module_dir_brute(url):
     print("[*] Brute force directory...")
     common = ['admin', 'flag', 'secret', 'config', '.git', '.env']
@@ -201,7 +201,7 @@ def module_pcap_deep(path):
         print("[-] pyshark belum terinstall. Jalankan: pip install pyshark")
     except Exception as e:
         print("[-] PCAP deep analysis failed:", e)
-        
+
 def module_dom_render_flag(url):
     print("[*] Render DOM & cari flag di JS dinamis...")
     try:
@@ -241,42 +241,6 @@ def module_js_inline_analyzer(url):
                 except: continue
     except Exception as e:
         print("[-] JS Inline Analyzer gagal:", e)
-
-def auto_router(target):
-    if target.startswith("http"):
-        module_web(target)
-        module_spoof_headers(target)
-        module_js_crawler(target)
-        module_dir_brute(target)
-        module_click_sim(target)
-        module_auto_secret_bing(target)
-        module_dom_render_flag(target)
-        module_js_inline_analyzer(target)
-    elif os.path.isfile(target):
-        name = os.path.basename(target).lower()
-        ext = os.path.splitext(target)[1].lower()
-        if 'pcap' in ext: module_pcap_deep(target)
-        elif 'log' in ext: module_log(target)
-        elif 'usb' in name: module_usb(target)
-        elif 'browser' in name or 'history' in name: module_browser(target)
-        elif 'ntuser' in name or 'sam' in name: module_win_forensic(target)
-        else: module_crypto(target)
-    else:
-        print("[-] Target tidak dikenali.")
-
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-t', '--target', required=True)
-    args = parser.parse_args()
-    show_banner()
-    auto_router(args.target)
-
-if __name__ == '__main__':
-    main()
-
-
-
-# ====== MODULE TAMBAHAN LANJUTAN ======
 
 def module_flag_multi(text):
     patterns = [r'IDN_CTF\{.*?\}', r'FLAG\{.*?\}', r'[A-Za-z0-9-_]{10,}\.[A-Za-z0-9-_]{10,}', r'eyJ[A-Za-z0-9-_]+\.']
@@ -369,7 +333,40 @@ def module_recursive_zip(path):
     extract_recursive(path, extract_dir)
     print("[+] Extraction complete to:", extract_dir)
 
+def auto_router(target):
+    if target.startswith("http"):
+        module_web(target)
+        module_spoof_headers(target)
+        module_js_crawler(target)
+        module_dir_brute(target)
+        module_click_sim(target)
+        module_auto_secret_bing(target)
+        module_dom_render_flag(target)
+        module_js_inline_analyzer(target)
+        module_form_bruter(target)
+        module_param_finder(target)
+        module_dom_xss_eval(target)
+        module_agent_rotation(target)
+        module_js_deep_secrets(target)
+    elif os.path.isfile(target):
+        name = os.path.basename(target).lower()
+        ext = os.path.splitext(target)[1].lower()
+        if 'pcap' in ext: module_pcap_deep(target)
+        elif 'log' in ext: module_log(target)
+        elif 'usb' in name: module_usb(target)
+        elif 'browser' in name or 'history' in name: module_browser(target)
+        elif 'ntuser' in name or 'sam' in name: module_win_forensic(target)
+        elif 'zip' in ext: module_recursive_zip(target)
+        else: module_crypto(target)
+    else:
+        print("[-] Target tidak dikenali.")
 
-# === DOM RENDERING + INLINE JS ANALYZER ===
-from requests_html import HTMLSession
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-t', '--target', required=True)
+    args = parser.parse_args()
+    show_banner()
+    auto_router(args.target)
 
+if __name__ == '__main__':
+    main()
