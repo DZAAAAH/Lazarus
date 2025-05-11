@@ -213,7 +213,7 @@ def auto_router(target):
     elif os.path.isfile(target):
         name = os.path.basename(target).lower()
         ext = os.path.splitext(target)[1].lower()
-        if 'pcap' in ext: module_pcap(target)
+        if 'pcap' in ext: module_pcap_deep(target)
         elif 'log' in ext: module_log(target)
         elif 'usb' in name: module_usb(target)
         elif 'browser' in name or 'history' in name: module_browser(target)
@@ -231,3 +231,98 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+
+
+# ====== MODULE TAMBAHAN LANJUTAN ======
+
+def module_flag_multi(text):
+    patterns = [r'IDN_CTF\{.*?\}', r'FLAG\{.*?\}', r'[A-Za-z0-9-_]{10,}\.[A-Za-z0-9-_]{10,}', r'eyJ[A-Za-z0-9-_]+\.']
+    for pat in patterns:
+        found = re.findall(pat, text)
+        for f in found:
+            print(Fore.MAGENTA + "[FIND]", f)
+            save_flag(f)
+
+def module_param_finder(url):
+    print("[*] Parameter Finder:")
+    try:
+        r = requests.get(url, timeout=5)
+        forms = BeautifulSoup(r.text, 'html.parser').find_all('form')
+        for i, form in enumerate(forms):
+            inputs = form.find_all('input')
+            print(f"Form #{i+1} with action: {form.get('action')}")
+            for inp in inputs:
+                print("   Input:", inp.get('name'))
+    except: print("[-] Param finder error.")
+
+def module_form_bruter(url):
+    print("[*] Form Bruter (default creds: admin/admin):")
+    try:
+        creds = [('admin', 'admin'), ('root', 'toor'), ('ctf', 'ctf123')]
+        for u, p in creds:
+            r = requests.post(url, data={'username': u, 'password': p}, timeout=5)
+            if 'flag' in r.text.lower() or 'success' in r.text.lower():
+                print(f"[+] Login sukses: {u}:{p}")
+                flags = re.findall(r'\w+\{.*?\}', r.text)
+                for f in flags:
+                    print(Fore.CYAN + "[FLAG]", f)
+                    save_flag(f)
+                return
+    except: print("[-] Form brute failed.")
+
+def module_dom_xss_eval(url):
+    print("[*] DOM XSS & eval() Checker:")
+    try:
+        r = requests.get(url, timeout=5)
+        if any(x in r.text for x in ['eval(', 'document.write(', 'innerHTML']):
+            print(Fore.RED + "[!] Potensi eval() atau DOM sink ditemukan!")
+        else:
+            print("[-] Tidak ada indikasi eval atau DOM sink.")
+    except: print("[-] Gagal fetch halaman.")
+
+def module_agent_rotation(url):
+    print("[*] Aggressive Agent Spoofing:")
+    uagents = [
+        "Mozilla/5.0 (X11; Linux x86_64)",
+        "curl/7.64.1", "Googlebot/2.1", "CTF-Scanner/1.0"
+    ]
+    for ua in uagents:
+        try:
+            r = requests.get(url, headers={'User-Agent': ua}, timeout=4)
+            flags = re.findall(r'\w+\{.*?\}', r.text)
+            for f in flags:
+                print(Fore.CYAN + "[FLAG]", f)
+                save_flag(f)
+        except: continue
+
+def module_js_deep_secrets(url):
+    print("[*] Deep JS Secret Hunter:")
+    try:
+        r = requests.get(url, timeout=5)
+        soup = BeautifulSoup(r.text, 'html.parser')
+        for s in soup.find_all('script'):
+            src = s.get('src')
+            if src:
+                full = urljoin(url, src)
+                try:
+                    js = requests.get(full, timeout=4).text
+                    secrets = re.findall(r'(token|key|flag)\s*[:=]\s*[\"\'](.*?)[\"\']', js, re.IGNORECASE)
+                    for k, v in secrets:
+                        print(f"[+] JS Secret {k}: {v}")
+                        module_flag_multi(v)
+                except: continue
+    except: print("[-] Deep JS failed.")
+
+def module_recursive_zip(path):
+    print("[*] Recursive ZIP Extractor:")
+    def extract_recursive(zfile, base):
+        with zipfile.ZipFile(zfile, 'r') as z:
+            z.extractall(base)
+            for name in z.namelist():
+                if name.endswith('.zip'):
+                    extract_recursive(os.path.join(base, name), base)
+    extract_dir = path + "_unzipped"
+    os.makedirs(extract_dir, exist_ok=True)
+    extract_recursive(path, extract_dir)
+    print("[+] Extraction complete to:", extract_dir)
