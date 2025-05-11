@@ -202,6 +202,46 @@ def module_pcap_deep(path):
     except Exception as e:
         print("[-] PCAP deep analysis failed:", e)
         
+def module_dom_render_flag(url):
+    print("[*] Render DOM & cari flag di JS dinamis...")
+    try:
+        session = HTMLSession()
+        r = session.get(url)
+        r.html.render(timeout=20)
+        if 'flag' in r.html.html.lower():
+            print(Fore.YELLOW + "[+] Flag mungkin ditemukan di DOM:")
+            flags = re.findall(r'\w+\{.*?\}', r.html.html)
+            for f in flags:
+                print(Fore.CYAN + "[FLAG]", f)
+                save_flag(f)
+        else:
+            print("[-] Tidak ada flag di hasil render DOM.")
+    except Exception as e:
+        print("[-] DOM render error:", e)
+
+def module_js_inline_analyzer(url):
+    print("[*] Analisa JS Inline...")
+    try:
+        r = requests.get(url, timeout=5)
+        soup = BeautifulSoup(r.text, 'html.parser')
+        scripts = soup.find_all('script')
+        for s in scripts:
+            code = s.text
+            if any(x in code.lower() for x in ['flag', 'decode', 'atob', 'btoa']):
+                print("[+] JS inline mencurigakan ditemukan:")
+                print(code.strip()[:300])
+                try:
+                    found = re.findall(r'atob\([\'\"](.+?)[\'\"]\)', code)
+                    for enc in found:
+                        try:
+                            decoded = base64.b64decode(enc).decode()
+                            print(Fore.CYAN + "[DECODED]", decoded)
+                            module_flag_multi(decoded)
+                        except: continue
+                except: continue
+    except Exception as e:
+        print("[-] JS Inline Analyzer gagal:", e)
+
 def auto_router(target):
     if target.startswith("http"):
         module_web(target)
@@ -333,42 +373,3 @@ def module_recursive_zip(path):
 # === DOM RENDERING + INLINE JS ANALYZER ===
 from requests_html import HTMLSession
 
-def module_dom_render_flag(url):
-    print("[*] Render DOM & cari flag di JS dinamis...")
-    try:
-        session = HTMLSession()
-        r = session.get(url)
-        r.html.render(timeout=20)
-        if 'flag' in r.html.html.lower():
-            print(Fore.YELLOW + "[+] Flag mungkin ditemukan di DOM:")
-            flags = re.findall(r'\w+\{.*?\}', r.html.html)
-            for f in flags:
-                print(Fore.CYAN + "[FLAG]", f)
-                save_flag(f)
-        else:
-            print("[-] Tidak ada flag di hasil render DOM.")
-    except Exception as e:
-        print("[-] DOM render error:", e)
-
-def module_js_inline_analyzer(url):
-    print("[*] Analisa JS Inline...")
-    try:
-        r = requests.get(url, timeout=5)
-        soup = BeautifulSoup(r.text, 'html.parser')
-        scripts = soup.find_all('script')
-        for s in scripts:
-            code = s.text
-            if any(x in code.lower() for x in ['flag', 'decode', 'atob', 'btoa']):
-                print("[+] JS inline mencurigakan ditemukan:")
-                print(code.strip()[:300])
-                try:
-                    found = re.findall(r'atob\([\'\"](.+?)[\'\"]\)', code)
-                    for enc in found:
-                        try:
-                            decoded = base64.b64decode(enc).decode()
-                            print(Fore.CYAN + "[DECODED]", decoded)
-                            module_flag_multi(decoded)
-                        except: continue
-                except: continue
-    except Exception as e:
-        print("[-] JS Inline Analyzer gagal:", e)
