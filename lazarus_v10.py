@@ -178,16 +178,30 @@ def module_win_forensic(path):
         if re.search(r'flag|pass|cred|user|admin', d, re.IGNORECASE):
             print("[+] Found:", d)
 
-def module_pcap(path):
-    print("[*] PCAP Forensic (Wireshark):")
+def module_pcap_deep(path):
+    print("[*] Deep PCAP Inspection (HTTP/Credentials/Cookies)...")
     try:
-        out = subprocess.check_output(['strings', path]).decode('utf-8')
-        for f in re.findall(r'\w+\{.*?\}', out):
-            print("[FLAG]", f)
-            save_flag(f)
-    except:
-        print("[-] Butuh 'strings' (binutils) untuk parse PCAP.")
-
+        import pyshark
+        cap = pyshark.FileCapture(path, display_filter="http")
+        for pkt in cap:
+            try:
+                if hasattr(pkt.http, 'file_data'):
+                    body = pkt.http.file_data
+                    flags = re.findall(r'\w+\{.*?\}', body)
+                    for f in flags:
+                        print("[FLAG]", f)
+                        save_flag(f)
+                elif hasattr(pkt.http, 'cookie'):
+                    print("[+] Cookie found:", pkt.http.cookie)
+                elif hasattr(pkt.http, 'authorization'):
+                    print("[+] Authorization:", pkt.http.authorization)
+            except: continue
+        cap.close()
+    except ImportError:
+        print("[-] pyshark belum terinstall. Jalankan: pip install pyshark")
+    except Exception as e:
+        print("[-] PCAP deep analysis failed:", e)
+        
 def auto_router(target):
     if target.startswith("http"):
         module_web(target)
